@@ -15,7 +15,7 @@ st.set_page_config(
 )
 
 # Optimize model loading with proper caching
-@st.cache_resource  # Using cache_resource instead of cache_data for model loading
+@st.cache_resource  # Using cache_resource for model loading to prevent reloading during each interaction
 def load_model():
     try:
         with open('model_penguin_65130701932.pkl', 'rb') as file:
