@@ -3,127 +3,73 @@ import pickle
 import numpy as np
 import pandas as pd
 
-# Configure the Streamlit page
+# Disable the warning for using st.cache
+st.set_option('deprecation.showfileUploaderEncoding', False)
+
+# Configure page to make it lighter
 st.set_page_config(
-    page_title="Penguin Species Prediction",
+    page_title="Penguin Prediction",
     page_icon="🐧",
-    layout="centered"
+    layout="centered",
+    initial_sidebar_state="collapsed"  # Collapse sidebar by default
 )
 
-# Create a function to load the model and encoders
-@st.cache_data  # Updated from @st.cache which is deprecated
+# Optimize model loading with proper caching
+@st.cache_resource  # Using cache_resource instead of cache_data for model loading
 def load_model():
     try:
         with open('model_penguin_65130701932.pkl', 'rb') as file:
-            data = pickle.load(file)
-        return data
+            return pickle.load(file)
     except FileNotFoundError:
-        st.error("Model file not found. Please ensure 'model_penguin_65130701932.pkl' exists in the same directory.")
+        st.error("Model file not found!")
         return None
 
-# Load the model and encoders
-try:
-    model, species_encoder, island_encoder, sex_encoder = load_model()
+# Load model only once at startup
+model_data = load_model()
 
-    # Main app UI
-    st.title("🐧 Penguin Species Prediction")
-    st.write("Enter the penguin's characteristics to predict its species.")
-
-    # Create two columns for input fields
+if model_data is not None:
+    model, species_encoder, island_encoder, sex_encoder = model_data
+    
+    # Streamlined UI
+    st.title("🐧 Penguin Prediction")
+    
+    # Use columns for better organization and faster rendering
     col1, col2 = st.columns(2)
-
+    
     with col1:
-        st.subheader("Categorical Features")
-        species = st.selectbox(
-            "Species",
-            options=species_encoder.classes_,
-            help="Select the penguin's species"
-        )
-        
-        island = st.selectbox(
-            "Island",
-            options=island_encoder.classes_,
-            help="Select the island where the penguin was observed"
-        )
-        
-        sex = st.selectbox(
-            "Sex",
-            options=sex_encoder.classes_,
-            help="Select the penguin's sex"
-        )
-
+        species = st.selectbox("Species", species_encoder.classes_, key='species')
+        island = st.selectbox("Island", island_encoder.classes_, key='island')
+        sex = st.selectbox("Sex", sex_encoder.classes_, key='sex')
+    
     with col2:
-        st.subheader("Measurements")
-        bill_length_mm = st.number_input(
-            "Bill Length (mm)",
-            min_value=30.0,
-            max_value=100.0,
-            step=0.1,
-            help="Enter the bill length in millimeters"
-        )
+        bill_length_mm = st.number_input("Bill Length (mm)", value=40.0, min_value=30.0, max_value=100.0, step=0.1)
+        bill_depth_mm = st.number_input("Bill Depth (mm)", value=15.0, min_value=10.0, max_value=60.0, step=0.1)
+        flipper_length_mm = st.number_input("Flipper Length (mm)", value=200, min_value=150, max_value=250, step=1)
+        body_mass_g = st.number_input("Body Mass (g)", value=4000, min_value=2000, max_value=7000, step=10)
+
+    # Streamlined prediction process
+    if st.button("Predict", type="primary", use_container_width=True):
+        # Create input data more efficiently
+        input_data = pd.DataFrame({
+            "bill_length_mm": [bill_length_mm],
+            "bill_depth_mm": [bill_depth_mm],
+            "flipper_length_mm": [flipper_length_mm],
+            "body_mass_g": [body_mass_g],
+            "species": species_encoder.transform([species]),
+            "island": island_encoder.transform([island]),
+            "sex": sex_encoder.transform([sex])
+        })
         
-        bill_depth_mm = st.number_input(
-            "Bill Depth (mm)",
-            min_value=10.0,
-            max_value=60.0,
-            step=0.1,
-            help="Enter the bill depth in millimeters"
-        )
+        # Make prediction
+        prediction = model.predict(input_data)
+        predicted_species = species_encoder.inverse_transform(prediction)[0]
         
-        flipper_length_mm = st.number_input(
-            "Flipper Length (mm)",
-            min_value=150,
-            max_value=250,
-            step=1,
-            help="Enter the flipper length in millimeters"
-        )
+        # Display result efficiently
+        st.success(f"Predicted Species: {predicted_species}")
         
-        body_mass_g = st.number_input(
-            "Body Mass (g)",
-            min_value=2000,
-            max_value=7000,
-            step=10,
-            help="Enter the body mass in grams"
-        )
+        # Optional: Display compact summary
+        with st.expander("View Input Summary"):
+            st.write(input_data.iloc[0])
 
-    # Add a prediction button with custom styling
-    st.markdown("---")
-    predict_button = st.button("Predict Species", type="primary")
-
-    if predict_button:
-        try:
-            # Create input array for prediction
-            input_data = pd.DataFrame([[
-                bill_length_mm, bill_depth_mm, flipper_length_mm, body_mass_g
-            ]], columns=["bill_length_mm", "bill_depth_mm", "flipper_length_mm", "body_mass_g"])
-            
-            # Add encoded categorical variables
-            input_data["species"] = species_encoder.transform([species])
-            input_data["island"] = island_encoder.transform([island])
-            input_data["sex"] = sex_encoder.transform([sex])
-
-            # Make prediction
-            prediction = model.predict(input_data)
-            predicted_species = species_encoder.inverse_transform(prediction)[0]
-
-            # Display result with styling
-            st.success(f"Predicted Penguin Species: **{predicted_species}**")
-            
-            # Display input summary
-            st.subheader("Input Summary")
-            summary_df = pd.DataFrame({
-                'Feature': ['Island', 'Sex', 'Bill Length', 'Bill Depth', 'Flipper Length', 'Body Mass'],
-                'Value': [island, sex, f"{bill_length_mm} mm", f"{bill_depth_mm} mm", 
-                         f"{flipper_length_mm} mm", f"{body_mass_g} g"]
-            })
-            st.table(summary_df)
-
-        except Exception as e:
-            st.error(f"An error occurred during prediction: {str(e)}")
-
-except Exception as e:
-    st.error(f"Failed to initialize the application: {str(e)}")
-
-# Add footer
-st.markdown("---")
-st.markdown("Made with ❤️ using Streamlit")
+else:
+    st.error("Failed to load the model. Please check if the model file exists.")
